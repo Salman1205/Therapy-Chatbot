@@ -1,8 +1,13 @@
-from flask import Flask, request, jsonify, redirect, url_for
+from flask import Flask, request, jsonify, redirect, url_for, send_from_directory
 import os
 from groq import Groq
 from datetime import datetime
 from dotenv import load_dotenv
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -13,12 +18,17 @@ app = Flask(__name__)
 app.config['PROPAGATE_EXCEPTIONS'] = True
 app.config['JSON_SORT_KEYS'] = False
 
+# Ensure static folders exist
+os.makedirs('static/css', exist_ok=True)
+os.makedirs('static/images', exist_ok=True)
+
 # In-memory store for user data (for MVP/demo purposes only)
 users = {}
 
 # Use environment variable for API key
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 if not GROQ_API_KEY:
+    logger.error("GROQ_API_KEY environment variable is not set")
     raise ValueError("GROQ_API_KEY environment variable is not set")
 
 # Specify the model name
@@ -26,6 +36,25 @@ MODEL_NAME = "llama-3.3-70b-versatile"
 
 # Initialize the Groq client
 client = Groq(api_key=GROQ_API_KEY)
+
+# Add static file handling
+@app.route('/static/<path:path>')
+def serve_static(path):
+    try:
+        return send_from_directory('static', path)
+    except Exception as e:
+        logger.error(f"Error serving static file {path}: {str(e)}")
+        return str(e), 500
+
+@app.errorhandler(404)
+def not_found_error(error):
+    logger.error(f"404 error: {error}")
+    return jsonify({"error": "Not found"}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"500 error: {error}")
+    return jsonify({"error": "Internal server error"}), 500
 
 def generate_response(prompt):
     """Generate a response using the Groq API."""
